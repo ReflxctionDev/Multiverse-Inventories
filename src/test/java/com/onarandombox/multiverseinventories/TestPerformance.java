@@ -1,6 +1,7 @@
 package com.onarandombox.multiverseinventories;
 
 import com.onarandombox.MultiverseCore.MultiverseCore;
+import com.onarandombox.multiverseinventories.event.ShareHandlingEvent;
 import com.onarandombox.multiverseinventories.profile.PlayerProfile;
 import com.onarandombox.multiverseinventories.share.Sharable;
 import com.onarandombox.multiverseinventories.share.Sharables;
@@ -181,7 +182,7 @@ public class TestPerformance {
         for (int i = 0; i < numTests; i++) {
             ShareHandler shareHandler = new WorldChangeShareHandler(inventories, player, "world", "world2");
             startTime = System.nanoTime();
-            shareHandler.handle();
+            shareHandler.prepareProfiles();
             endTime = System.nanoTime();
             timeTaken[i] = (endTime - startTime) / 1000000D;
             total += timeTaken[i];
@@ -191,10 +192,11 @@ public class TestPerformance {
         timeTaken = new double[numTests];
         total = 0;
         ShareHandler shareHandler = new WorldChangeShareHandler(inventories, player, "world", "world2");
-        shareHandler.handle();
+        shareHandler.prepareProfiles();
+        ShareHandlingEvent event = shareHandler.createEvent();
         for (int i = 0; i < numTests; i++) {
             startTime = System.nanoTime();
-            shareHandler.updateProfile(inventories, player, shareHandler.event.getFromProfiles().get(0));
+            ShareHandler.updateProfile(inventories, player, event.getWriteProfiles().get(0));
             endTime = System.nanoTime();
             timeTaken[i] = (endTime - startTime) / 1000000D;
             total += timeTaken[i];
@@ -204,10 +206,11 @@ public class TestPerformance {
         timeTaken = new double[numTests];
         total = 0;
         shareHandler = new WorldChangeShareHandler(inventories, player, "world", "world2");
-        shareHandler.handle();
+        shareHandler.prepareProfiles();
+        event = shareHandler.createEvent();
         for (int i = 0; i < numTests; i++) {
             startTime = System.nanoTime();
-            shareHandler.updatePlayer(inventories, player, shareHandler.event.getToProfiles().get(0));
+            ShareHandler.updatePlayer(inventories, player, event.getReadProfiles().get(0));
             endTime = System.nanoTime();
             timeTaken[i] = (endTime - startTime) / 1000000D;
             total += timeTaken[i];
