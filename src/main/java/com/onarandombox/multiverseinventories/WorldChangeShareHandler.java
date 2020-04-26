@@ -11,6 +11,7 @@ import com.onarandombox.multiverseinventories.util.Perm;
 import org.bukkit.entity.Player;
 
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * WorldChange implementation of ShareHandler.
@@ -19,8 +20,8 @@ final class WorldChangeShareHandler extends ShareHandler {
 
     private final String fromWorld;
     private final String toWorld;
-    private final List<WorldGroup> fromWorldGroups;
-    private final List<WorldGroup> toWorldGroups;
+    private final List<WorldGroupWrapper> fromWorldGroups;
+    private final List<WorldGroupWrapper> toWorldGroups;
     private final ReadProfilesAggregator readProfilesAggregator = new ReadProfilesAggregator();
 
     WorldChangeShareHandler(MultiverseInventories inventories, Player player,
@@ -29,9 +30,16 @@ final class WorldChangeShareHandler extends ShareHandler {
         this.fromWorld = fromWorld;
         this.toWorld = toWorld;
         // Get any groups we may need to save stuff to.
-        this.fromWorldGroups = this.inventories.getGroupManager().getGroupsForWorld(fromWorld);
+        this.fromWorldGroups = getWorldGroups(fromWorld);
         // Get any groups we may need to load stuff from.
-        this.toWorldGroups = this.inventories.getGroupManager().getGroupsForWorld(toWorld);
+        this.toWorldGroups = getWorldGroups(toWorld);
+    }
+
+    private List<WorldGroupWrapper> getWorldGroups(String world) {
+        List<WorldGroup> worldGroups = this.inventories.getGroupManager().getGroupsForWorld(world);
+        return worldGroups.stream()
+                .map(worldGroup -> new WorldGroupWrapper(worldGroup, affectedProfiles))
+                .collect(Collectors.toList());
     }
 
     @Override
@@ -83,7 +91,7 @@ final class WorldChangeShareHandler extends ShareHandler {
 
     private void addWriteProfiles() {
         if (hasFromWorldGroups()) {
-            fromWorldGroups.forEach(this::addWriteProfilesForWorldGroup);
+            fromWorldGroups.forEach(WorldGroupWrapper::conditionallyAddWriteProfiles);
         } else {
             Logging.finer("No groups for fromWorld.");
         }
@@ -91,29 +99,6 @@ final class WorldChangeShareHandler extends ShareHandler {
 
     private boolean hasFromWorldGroups() {
         return !fromWorldGroups.isEmpty();
-    }
-
-    private void addWriteProfilesForWorldGroup(WorldGroup worldGroup) {
-        if (shouldWriteToWorldGroup(worldGroup)) {
-            addWorldGroupToWriteProfiles(worldGroup);
-        }
-    }
-
-    private boolean shouldWriteToWorldGroup(WorldGroup worldGroup) {
-        return isToWorldInWorldGroup(worldGroup) || isWorldGroupNotSharingAll(worldGroup);
-    }
-
-    private boolean isToWorldInWorldGroup(WorldGroup worldGroup) {
-        return !worldGroup.containsWorld(toWorld);
-    }
-
-    private boolean isWorldGroupNotSharingAll(WorldGroup worldGroup) {
-        return !worldGroup.getShares().isSharing(Sharables.all());
-    }
-
-    private void addWorldGroupToWriteProfiles(WorldGroup worldGroup) {
-        ProfileContainer container = worldGroup.getGroupProfileContainer();
-        addWriteProfile(container.getPlayerData(player), getWorldGroupShares(worldGroup));
     }
 
     private Shares getWorldGroupShares(WorldGroup worldGroup) {
@@ -224,6 +209,39 @@ final class WorldChangeShareHandler extends ShareHandler {
 
         private ProfileContainer getToWorldProfileContainer() {
             return inventories.getWorldProfileContainerStore().getContainer(toWorld);
+        }
+    }
+
+    private static class WorldGroupWrapper {
+        private final WorldGroup worldGroup;
+        private final AffectedProfiles affectedProfiles;
+
+        public WorldGroupWrapper(WorldGroup worldGroup, AffectedProfiles affectedProfiles) {
+            this.worldGroup = worldGroup;
+            this.affectedProfiles = affectedProfiles;
+        }
+
+        private void conditionallyAddWriteProfiles(String toWorld, Player player) {
+            if (isEligibleForWriteWhenGoingTo(toWorld)) {
+                addWriteProfiles();
+            }
+        }
+
+        boolean isEligibleForWriteWhenGoingTo(String toWorld) {
+            return doesNotContainWorld(toWorld) || isNotSharingAll();
+        }
+
+        private boolean doesNotContainWorld(String world) {
+            return !worldGroup.containsWorld(world);
+        }
+
+        private boolean isNotSharingAll() {
+            return !worldGroup.getShares().isSharing(Sharables.all());
+        }
+
+        void addWriteProfiles() {
+            ProfileContainer container = worldGroup.getGroupProfileContainer();
+            affectedProfiles.addWriteProfile(container.getPlayerData(player), getWorldGroupShares(worldGroup));
         }
     }
 
