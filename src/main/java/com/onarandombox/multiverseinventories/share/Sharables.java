@@ -7,11 +7,8 @@ import com.onarandombox.multiverseinventories.DataStrings;
 import com.onarandombox.multiverseinventories.PlayerStats;
 import com.onarandombox.multiverseinventories.profile.PlayerProfile;
 import com.onarandombox.multiverseinventories.util.MinecraftTools;
-import org.bukkit.Bukkit;
-import org.bukkit.Location;
-import org.bukkit.Material;
-import org.bukkit.NamespacedKey;
-import org.bukkit.World;
+import org.bukkit.*;
+import org.bukkit.advancement.Advancement;
 import org.bukkit.entity.Player;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.persistence.PersistentDataAdapterContext;
@@ -20,17 +17,9 @@ import org.bukkit.persistence.PersistentDataType;
 import org.bukkit.potion.PotionEffect;
 import org.jetbrains.annotations.NotNull;
 
+import java.lang.reflect.Array;
 import java.nio.ByteBuffer;
-import java.util.Arrays;
-import java.util.Collection;
-import java.util.HashMap;
-import java.util.Iterator;
-import java.util.LinkedHashSet;
-import java.util.LinkedList;
-import java.util.List;
-import java.util.Map;
-import java.util.Set;
-import java.util.UUID;
+import java.util.*;
 
 /**
  * The Sharables class is where all the default Sharable instances are located as constants as well as a factory class
@@ -689,6 +678,98 @@ public final class Sharables implements Shares {
     }
 
     /**
+     * Sharing Advancements.
+     */
+    public static final Sharable<String[]> ADVANCEMENTS = new Sharable.Builder<String[]>("advancements", String[].class,
+            new SharableHandler<String[]>() {
+                @Override
+                public void updateProfile(PlayerProfile profile, Player player) {
+                    HashSet<String> completedAdvancements = new HashSet<>();
+                    Iterator<Advancement> advancementIterator = inventories.getServer().advancementIterator();
+
+                    while (advancementIterator.hasNext()) {
+                        Advancement advancement = advancementIterator.next();
+                        Collection<String> awardedCriteria = player.getAdvancementProgress(advancement).getAwardedCriteria();
+                        completedAdvancements.addAll(awardedCriteria);
+                    }
+
+                    profile.set(ADVANCEMENTS, completedAdvancements.toArray(new String[completedAdvancements.size()]));
+                }
+
+                @Override
+                public boolean updatePlayer(Player player, PlayerProfile profile) {
+                    String[] advancements = profile.get(ADVANCEMENTS);
+                    HashSet<String> processedAdvancements = new HashSet<>();
+                    HashSet<String> completedAdvancements = (advancements != null) ? new HashSet<>(Arrays.asList(advancements)) : new HashSet<>();
+                    Iterator<Advancement> advancementIterator = inventories.getServer().advancementIterator();
+
+                    while (advancementIterator.hasNext()) {
+                        Advancement advancement = advancementIterator.next();
+                        // the set of Advancements to revoke
+                        Set<String> revoke = new HashSet<>(advancement.getCriteria());
+                        // the set of Advancements to grant
+                        Set<String> intersection = new HashSet<>(advancement.getCriteria());
+
+                        revoke.removeAll(processedAdvancements);
+                        revoke.removeAll(completedAdvancements);
+                        intersection.removeAll(processedAdvancements);
+                        intersection.retainAll(completedAdvancements);
+
+                        for (String criteria: revoke) {
+                            processedAdvancements.add(criteria);
+                            completedAdvancements.remove(criteria);
+                            player.getAdvancementProgress(advancement).revokeCriteria(criteria);
+                        }
+                        for (String criteria: intersection) {
+                            processedAdvancements.add(criteria);
+                            completedAdvancements.remove(criteria);
+                            player.getAdvancementProgress(advancement).awardCriteria(criteria);
+                        }
+
+                        // here's the idea: revoke all (criteria \ completedAdvancements), grant (criteria intersect completedAdvancements)
+                        // also, we don't need to grant/revoke anything in processedAdvancements since they've already been granted/revoked!
+                    }
+                    return advancements != null;
+                }
+            }).serializer(new ProfileEntry(false, "advancements"), new StringArraySerializer())
+            .altName("achievements").build();
+
+    /**
+     * Sharing Statistics.
+     */
+    public static final Sharable<HashMap> GAME_STATISTICS = new Sharable.Builder<HashMap>("game_statistics", HashMap.class,
+            new SharableHandler<HashMap>() {
+                @Override
+                public void updateProfile(PlayerProfile profile, Player player) {
+                    HashMap<String, Integer> playerStats = new HashMap<>();
+                    for (Statistic stat: Statistic.values()) {
+                        if (stat.getType() == Statistic.Type.UNTYPED) {
+                            int val = player.getStatistic(stat);
+                            // no need to save values of 0, that's the default!
+                            if (val != 0) playerStats.put(stat.name(), val);
+                        }
+                    }
+                    profile.set(GAME_STATISTICS, playerStats);
+                }
+
+                @Override
+                public boolean updatePlayer(Player player, PlayerProfile profile) {
+                    HashMap<String, Integer> playerStats = profile.get(GAME_STATISTICS);
+                    for (Statistic stat : Statistic.values()) {
+                        if (stat.getType() == Statistic.Type.UNTYPED) player.setStatistic(stat, 0);
+                    }
+                    if (playerStats == null) {
+                        return false;
+                    }
+                    for (String stringStat : playerStats.keySet()) {
+                        Statistic stat = Statistic.valueOf(stringStat);
+                        if (stat.getType() == Statistic.Type.UNTYPED) player.setStatistic(stat, playerStats.get(stat.name()));
+                    }
+                    return true;
+                }
+            }).defaultSerializer(new ProfileEntry(false, "game_statistics")).altName("game_stats").build();
+
+    /**
      * Grouping for inventory sharables.
      */
     public static final SharableGroup ALL_INVENTORY = new SharableGroup("inventory",
@@ -731,7 +812,8 @@ public final class Sharables implements Shares {
      */
     public static final SharableGroup ALL_DEFAULT = new SharableGroup("all", fromSharables(HEALTH, ECONOMY,
             FOOD_LEVEL, SATURATION, EXHAUSTION, EXPERIENCE, TOTAL_EXPERIENCE, LEVEL, INVENTORY, ARMOR, BED_SPAWN,
-            MAXIMUM_AIR, REMAINING_AIR, FALL_DISTANCE, FIRE_TICKS, POTIONS, LAST_LOCATION, ENDER_CHEST, OFF_HAND),
+            MAXIMUM_AIR, REMAINING_AIR, FALL_DISTANCE, FIRE_TICKS, POTIONS, LAST_LOCATION, ENDER_CHEST, OFF_HAND,
+            ADVANCEMENTS, GAME_STATISTICS),
             "*", "everything");
 
 
