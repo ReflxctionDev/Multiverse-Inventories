@@ -7,6 +7,7 @@ import com.onarandombox.multiverseinventories.DataStrings;
 import com.onarandombox.multiverseinventories.PlayerStats;
 import com.onarandombox.multiverseinventories.profile.PlayerProfile;
 import com.onarandombox.multiverseinventories.util.MinecraftTools;
+import org.bukkit.GameRule;
 import org.bukkit.Location;
 import org.bukkit.Material;
 import org.bukkit.Statistic;
@@ -590,6 +591,8 @@ public final class Sharables implements Shares {
                     HashSet<String> completedAdvancements = (advancements != null) ? new HashSet<>(Arrays.asList(advancements)) : new HashSet<>();
                     Iterator<Advancement> advancementIterator = inventories.getServer().advancementIterator();
 
+                    boolean announceAdvancements = player.getWorld().getGameRuleValue(GameRule.ANNOUNCE_ADVANCEMENTS);
+                    if (announceAdvancements) player.getWorld().setGameRule(GameRule.ANNOUNCE_ADVANCEMENTS, false);
                     while (advancementIterator.hasNext()) {
                         Advancement advancement = advancementIterator.next();
                         // the set of Advancements to revoke
@@ -616,6 +619,7 @@ public final class Sharables implements Shares {
                         // here's the idea: revoke all (criteria \ completedAdvancements), grant (criteria intersect completedAdvancements)
                         // also, we don't need to grant/revoke anything in processedAdvancements since they've already been granted/revoked!
                     }
+                    if (announceAdvancements) player.getWorld().setGameRule(GameRule.ANNOUNCE_ADVANCEMENTS, true);
                     return advancements != null;
                 }
             }).serializer(new ProfileEntry(false, "advancements"), new StringArraySerializer())
@@ -691,7 +695,7 @@ public final class Sharables implements Shares {
      */
     public static final SharableGroup STATS = new SharableGroup("stats",
             fromSharables(HEALTH, FOOD_LEVEL, SATURATION, EXHAUSTION, EXPERIENCE, TOTAL_EXPERIENCE, LEVEL,
-                    REMAINING_AIR, MAXIMUM_AIR, FALL_DISTANCE, FIRE_TICKS, POTIONS));
+                    REMAINING_AIR, MAXIMUM_AIR, FALL_DISTANCE, FIRE_TICKS, POTIONS, GAME_STATISTICS));
 
     /**
      * Grouping for ALL default sharables.
